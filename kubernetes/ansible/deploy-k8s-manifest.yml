@@ -1,0 +1,69 @@
+---
+- hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    exec_user: jenkins
+    exec_group: jenkins
+    k8s_manifest_url: "{{ product_url | urlsplit('path') }}"
+    k8s_manifest_dir: "{{ k8s_manifest_url | dirname }}"   #.split("/")[0:-1]|join("/")
+    k8s_manifest_local: "{{ workspace_dir}}{{ k8s_manifest_url }}"
+
+  tasks:
+
+    - name: Create directory for product manifest download
+      file:
+        path: "{{ workspace_dir }}{{ k8s_manifest_dir }}"
+        state: directory
+        mode: 0700
+      become: true
+
+#    - name: Copy certificate to connect to k8s_cluster # modify or remove code to reflect certificate management; May not be required at this stage.
+#      copy:
+#        src: "{{ certificate_path }}/ca.pem"
+#        dest: "./"
+#        owner: "{{ exec_user }}"
+#        group: "{{ exec_group }}"
+#        mode: 0400
+#      become: true
+
+    - name: Copy k8s config file to workspace # modify or remove code to reflect work flow.
+      copy:
+        src: /var/lib/kubernetes/kubeconfig
+        dest: "{{ workspace_dir }}{{ k8s_manifest_dir }}"
+        owner: "{{ exec_user }}"
+        group: "{{ exec_group }}"
+        mode: 0600
+      become: true
+
+  - name: Update k8s config connection information
+    lineinfile:
+      dest: "{{ workspace_dir }}{{ k8s_manifest_dir }}/kubeconfig"
+      regexp: '^(.*)certificate-authority:(.*)$'
+      line: "'certificate-authority: {{ workspace_dir }}{{ k8s_manifest_dir }}/ca.pem }}'"
+      regexp: '^(.*)server:(.*)$'
+      line: "'server: https://{{ k8s_cluster_name }}{{ k8s_cluster_port }}'"
+      regexp: '^(.*)token:(.*)$'
+      line: "'token: {{ k8s_cluster_token }}'"
+      backrefs: yes
+    register: product_kubeconfig
+
+    - name: Download product k8s manifest file
+      get_url:
+        url: "{{ product_url }}"
+        dest: "{{ workspace_dir}}{{ k8s_manifest_url }}"
+        force: yes
+        onwer: "{{ exec_user }}"
+        group: "{{ exec_group }}"
+        mode: 0400
+        sha256sum: no
+      become: true
+      register: product_manifest_content
+
+    - name: Deploy product k8s manifest file
+      shell: "kubectl --kubeconfig={./kubeconfig apply -f {{ manifest_matching_dir }}/{{ item }}"
+      with_items:
+          - "{{ k8s_manifest_local }}"
+      register: product_manifest_ingressed
+
