@@ -6,7 +6,7 @@ The following information is to provide other possible supplements to this singl
     - Not included in this playbook as it should be taken care of in a previous stage (I.e. pipeline).
 
 #### Variables to define if not declared during execution (user or by pipeline):
-    workspace_dir: # set dynamically
+    workspace_dir: # set dynamically or use lookup env
     product_url: http://domain.com/(latest)|(stable)|(nightly)|(beta)|(alpha)|(build_version)/filename   #set dynamically;
        Consult with your development team for the release versioning structure.
     k8s_cluster_name : set dynamically
@@ -51,3 +51,12 @@ The following information is to provide other possible supplements to this singl
       shell: "/usr/bin/something_else --param {{ item }}"
       with_items:
         - "{{ command_result.stdout_lines }}"
+
+#### Tip: How to modify Ansible playbook to accept Jenkins' environment vars:
+    ---
+    - hosts: all
+      tasks:
+        - command: echo "{{ lookup('env','PATH') }}"
+          register: default_path
+        - command: echo "{{ lookup('env','WORKSPACE') }}"
+          register: jenkins_job_workspace
